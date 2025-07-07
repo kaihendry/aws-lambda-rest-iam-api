@@ -1,0 +1,11 @@
+{
+  "httpMethod": "GET",
+  "path": "/health",
+  "headers": {},
+  "queryStringParameters": null,
+  "body": null,
+  "requestContext": {
+    "requestId": "test-request-id",
+    "stage": "dev"
+  }
+}
