@@ -1,106 +1,110 @@
-# AWS Lambda REST API with IAM Authentication
+# CLAUDE.md
 
-A serverless REST API built with AWS SAM and Go that uses IAM authentication for secure access.
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-## Features
+## Project Overview
 
-- **IAM Authentication**: API endpoints protected with AWS IAM
-- **Multiple Endpoints**: Root, health check, and data endpoints
-- **AWS SigV4**: Access using curl with AWS Signature Version 4
-- **CORS Enabled**: Cross-origin resource sharing configured
-- **Go Lambda**: High-performance Go runtime
+This is an AWS Lambda REST API project with IAM integration, built using:
+- **Go** as the primary programming language
+- **AWS SAM (Serverless Application Model)** for infrastructure as code
+- **GitHub Actions** for CI/CD pipeline
 
-## API Endpoints
+## Architecture
 
-- `GET /` - Welcome message
-- `GET /health` - Health check endpoint
-- `GET /data` - Retrieve data
-- `POST /data` - Submit data
+The project follows AWS SAM conventions for serverless applications:
+- Lambda functions will be defined in `template.yaml` or `template.yml`
+- Go handlers typically organized in separate directories (e.g., `cmd/`, `internal/`, or function-specific directories)
+- IAM roles and policies defined in the SAM template
+- REST API endpoints configured through AWS API Gateway
 
-## Prerequisites
+## Development Commands
 
-- AWS CLI configured with appropriate permissions
-- AWS SAM CLI installed
-- Go 1.21 or later
-- curl with AWS SigV4 support
+Based on the GitHub Actions workflow, the primary commands are:
 
-## Quick Start
-
-### 1. Deploy the API
-
+### Deployment
 ```bash
 make deploy
 ```
 
-### 2. Get API URL and Role ARN
-
+### Local Development
+AWS SAM provides local development capabilities:
 ```bash
-# Get the API URL
-make api-url
-
-# Get the IAM role ARN for API access
-make role-arn
+sam build
+sam local start-api
+sam local invoke <function-name>
 ```
 
-### 3. Test with curl
-
+### Testing
 ```bash
-# Health check
-curl --aws-sigv4 'aws:amz:eu-west-2:execute-api' \
-     --user 'YOUR_ACCESS_KEY:YOUR_SECRET_KEY' \
-     'https://your-api-id.execute-api.eu-west-2.amazonaws.com/dev/health'
-
-# Get data
-curl --aws-sigv4 'aws:amz:eu-west-2:execute-api' \
-     --user 'YOUR_ACCESS_KEY:YOUR_SECRET_KEY' \
-     'https://your-api-id.execute-api.eu-west-2.amazonaws.com/dev/data'
-
-# Post data
-curl --aws-sigv4 'aws:amz:eu-west-2:execute-api' \
-     --user 'YOUR_ACCESS_KEY:YOUR_SECRET_KEY' \
-     -X POST -H 'Content-Type: application/json' \
-     -d '{"message":"Hello World"}' \
-     'https://your-api-id.execute-api.eu-west-2.amazonaws.com/dev/data'
+go test ./...
+go test -v ./...  # verbose output
 ```
 
-## Available Commands
-
+### Build
 ```bash
-make help          # Show all available commands
-make build         # Build the Go Lambda function
-make deploy        # Deploy the SAM application
-make test          # Run Go tests
-make local-start   # Start API Gateway locally
-make clean         # Clean build artifacts
-make destroy       # Delete the SAM application
-make curl-examples # Show example curl commands
+go build ./...
+sam build
 ```
 
-## Local Development
+## CI/CD Pipeline
 
-Start the API locally for development:
+The project uses GitHub Actions with:
+- **Trigger**: Push to main branch or manual workflow dispatch
+- **AWS Authentication**: OIDC with IAM role `arn:aws:iam::407461997746:role/github-actions-Role-56IHHM969DKJ`
+- **Region**: eu-west-2
+- **Deployment**: `make deploy` command
 
-```bash
-make local-start
+## Key Files to Expect
+
+When implementing features, look for:
+- `template.yaml` - SAM template defining Lambda functions and API Gateway
+- `Makefile` - Build and deployment commands
+- `go.mod` - Go module dependencies
+- `samconfig.toml` - SAM configuration for different environments
+- Function handlers in Go (likely in `cmd/` or named directories)
+
+## Development Notes
+
+- The project uses Go modules for dependency management
+- Lambda functions should follow AWS Lambda Go runtime conventions
+- API Gateway integration handles REST endpoint routing
+- IAM policies should be defined in the SAM template for proper permissions
+- Environment-specific configurations managed through SAM parameters
+
+## IAM Authorization
+
+The API Gateway is configured with **AWS_IAM** authentication, requiring AWS Signature Version 4 for all requests.
+
+### Current Access Control
+- Any AWS principal with valid credentials and `execute-api:Invoke` permission can access the API
+- Authentication uses AWS SigV4, not API keys
+
+### Restricting Access to Specific Roles
+
+**Option 1: Resource-Based Policy**
+Add to API Gateway in template.yaml:
+```yaml
+RestApi:
+  Type: AWS::Serverless::Api
+  Properties:
+    Policy:
+      Statement:
+        - Effect: Allow
+          Principal:
+            AWS: 
+              - "arn:aws:iam::ACCOUNT:role/AllowedRole"
+          Action: execute-api:Invoke
+          Resource: "*"
 ```
 
-The API will be available at `http://localhost:3000`
+**Option 2: IAM Policies**
+Grant `execute-api:Invoke` only to specific roles/users.
 
-## Authentication
+### Why Not API Keys?
 
-The API uses AWS IAM for authentication. You need:
-
-1. Valid AWS credentials (Access Key ID and Secret Access Key)
-2. The credentials must have permission to invoke the API Gateway endpoints
-3. Use AWS SigV4 signing with curl or AWS SDK
-
-## Project Structure
-
-```
-.
-├── cmd/api/main.go     # Lambda function handler
-├── template.yaml       # SAM template
-├── samconfig.toml     # SAM configuration
-├── Makefile           # Build and deployment commands
-└── go.mod             # Go module dependencies
-```
+AWS API Keys are designed for **usage tracking and throttling**, not authentication:
+- API keys identify calling applications for billing/monitoring
+- They don't verify the caller's identity or permissions
+- Anyone with the key can use it (no user context)
+- They're typically used alongside other auth methods (IAM, Cognito, etc.)
+- For security, use IAM authentication which provides proper identity verification and access control

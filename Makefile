@@ -19,7 +19,7 @@ help:
 # Build the Go Lambda function for SAM
 build-ApiFunction:
 	@echo "Building Go Lambda function for SAM..."
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${ARTIFACTS_DIR}/bootstrap ./cmd/api
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o ${ARTIFACTS_DIR}/bootstrap .
 
 # Build the Go Lambda function
 build:
