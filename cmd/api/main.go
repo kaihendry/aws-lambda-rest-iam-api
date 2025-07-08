@@ -1,21 +1,15 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
+	"net/http"
+	"os"
 	"time"
 
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/apex/gateway/v2"
 )
-
-type Response struct {
-	StatusCode int               `json:"statusCode"`
-	Headers    map[string]string `json:"headers"`
-	Body       string            `json:"body"`
-}
 
 type HealthResponse struct {
 	Status    string `json:"status"`
@@ -30,122 +24,109 @@ type DataResponse struct {
 	Path    string      `json:"path"`
 }
 
-func handler(ctx context.Context, request events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
-	log.Printf("Processing request: %s %s", request.HTTPMethod, request.Path)
+func main() {
+	mux := http.NewServeMux()
 	
-	headers := map[string]string{
-		"Content-Type":                "application/json",
-		"Access-Control-Allow-Origin": "*",
-		"Access-Control-Allow-Methods": "GET,POST,PUT,DELETE,OPTIONS",
-		"Access-Control-Allow-Headers": "Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token",
+	// Define routes
+	mux.HandleFunc("/", handleRoot)
+	mux.HandleFunc("/health", handleHealth)
+	mux.HandleFunc("/data", handleData)
+
+	var err error
+	if _, ok := os.LookupEnv("AWS_LAMBDA_FUNCTION_NAME"); ok {
+		err = gateway.ListenAndServe("", mux)
+	} else {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8080"
+		}
+		slog.Info("Starting server", "port", port)
+		err = http.ListenAndServe(fmt.Sprintf(":%s", port), mux)
 	}
-
-	// Handle CORS preflight requests
-	if request.HTTPMethod == "OPTIONS" {
-		return events.APIGatewayProxyResponse{
-			StatusCode: 200,
-			Headers:    headers,
-			Body:       "",
-		}, nil
-	}
-
-	var response interface{}
-	var statusCode int
-
-	switch request.Path {
-	case "/":
-		response = DataResponse{
-			Message: "Welcome to AWS Lambda REST API with IAM Authentication",
-			Method:  request.HTTPMethod,
-			Path:    request.Path,
-		}
-		statusCode = 200
-
-	case "/health":
-		response = HealthResponse{
-			Status:    "healthy",
-			Timestamp: time.Now().UTC().Format(time.RFC3339),
-			Message:   "API is running successfully",
-		}
-		statusCode = 200
-
-	case "/data":
-		switch request.HTTPMethod {
-		case "GET":
-			response = DataResponse{
-				Message: "Data retrieved successfully",
-				Data: map[string]interface{}{
-					"items": []string{"item1", "item2", "item3"},
-					"count": 3,
-				},
-				Method: request.HTTPMethod,
-				Path:   request.Path,
-			}
-			statusCode = 200
-
-		case "POST":
-			var requestData map[string]interface{}
-			if request.Body != "" {
-				if err := json.Unmarshal([]byte(request.Body), &requestData); err != nil {
-					response = DataResponse{
-						Message: "Invalid JSON in request body",
-						Method:  request.HTTPMethod,
-						Path:    request.Path,
-					}
-					statusCode = 400
-				} else {
-					response = DataResponse{
-						Message: "Data received successfully",
-						Data:    requestData,
-						Method:  request.HTTPMethod,
-						Path:    request.Path,
-					}
-					statusCode = 201
-				}
-			} else {
-				response = DataResponse{
-					Message: "No data provided",
-					Method:  request.HTTPMethod,
-					Path:    request.Path,
-				}
-				statusCode = 400
-			}
-
-		default:
-			response = DataResponse{
-				Message: fmt.Sprintf("Method %s not allowed", request.HTTPMethod),
-				Method:  request.HTTPMethod,
-				Path:    request.Path,
-			}
-			statusCode = 405
-		}
-
-	default:
-		response = DataResponse{
-			Message: "Endpoint not found",
-			Method:  request.HTTPMethod,
-			Path:    request.Path,
-		}
-		statusCode = 404
-	}
-
-	responseBody, err := json.Marshal(response)
+	
 	if err != nil {
-		log.Printf("Error marshaling response: %v", err)
-		return events.APIGatewayProxyResponse{
-			StatusCode: 500,
-			Headers:    headers,
-			Body:       `{"message":"Internal server error"}`,
-		}, nil
+		slog.Error("Server error", "error", err)
+		os.Exit(1)
 	}
-
-	return events.APIGatewayProxyResponse{
-		StatusCode: statusCode,
-		Headers:    headers,
-		Body:       string(responseBody),
-	}, nil
 }
 
-func main() {
-	lambda.Start(handler)
+func handleRoot(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
+	
+	response := DataResponse{
+		Message: "Welcome to AWS Lambda REST API with IAM Authentication",
+		Method:  r.Method,
+		Path:    r.URL.Path,
+	}
+	
+	writeJSONResponse(w, response, http.StatusOK)
+}
+
+func handleHealth(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
+	
+	response := HealthResponse{
+		Status:    "healthy",
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Message:   "API is running successfully",
+	}
+	
+	writeJSONResponse(w, response, http.StatusOK)
+}
+
+func handleData(w http.ResponseWriter, r *http.Request) {
+	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
+	
+	switch r.Method {
+	case http.MethodGet:
+		response := DataResponse{
+			Message: "Data retrieved successfully",
+			Data: map[string]interface{}{
+				"items": []string{"item1", "item2", "item3"},
+				"count": 3,
+			},
+			Method: r.Method,
+			Path:   r.URL.Path,
+		}
+		writeJSONResponse(w, response, http.StatusOK)
+		
+	case http.MethodPost:
+		var requestData map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
+			response := DataResponse{
+				Message: "Invalid JSON in request body",
+				Method:  r.Method,
+				Path:    r.URL.Path,
+			}
+			writeJSONResponse(w, response, http.StatusBadRequest)
+			return
+		}
+		
+		response := DataResponse{
+			Message: "Data received successfully",
+			Data:    requestData,
+			Method:  r.Method,
+			Path:    r.URL.Path,
+		}
+		writeJSONResponse(w, response, http.StatusCreated)
+		
+	default:
+		response := DataResponse{
+			Message: fmt.Sprintf("Method %s not allowed", r.Method),
+			Method:  r.Method,
+			Path:    r.URL.Path,
+		}
+		writeJSONResponse(w, response, http.StatusMethodNotAllowed)
+	}
+}
+
+func writeJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(statusCode)
+	
+	if err := json.NewEncoder(w).Encode(data); err != nil {
+		slog.Error("Error encoding JSON response", "error", err)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+	}
 }

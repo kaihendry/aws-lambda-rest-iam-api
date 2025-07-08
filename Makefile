@@ -20,20 +20,20 @@ help:
 build-ApiFunction:
 	@echo "Building Go Lambda function for SAM..."
 	@echo "Current directory: $$(pwd)"
-	@echo "Building with: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ../../cmd/api/main.go"
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ../../cmd/api/main.go
+	@echo "Building with: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ./cmd/api"
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ./cmd/api
 
 # Build the Go Lambda function
 build:
 	@echo "Building Go Lambda function..."
-	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o cmd/api/bootstrap cmd/api/main.go
+	GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o bootstrap ./cmd/api
 	sam build
 
 # Clean build artifacts
 clean:
 	@echo "Cleaning build artifacts..."
 	rm -rf .aws-sam/
-	rm -f cmd/api/bootstrap
+	rm -f bootstrap
 	go clean
 
 # Deploy the SAM application

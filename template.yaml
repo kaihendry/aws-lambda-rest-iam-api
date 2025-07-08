@@ -26,42 +26,26 @@ Resources:
       Auth:
         DefaultAuthorizer: AWS_IAM
         InvokeRole: NONE
-      Cors:
-        AllowMethods: "'GET,POST,PUT,DELETE,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
-        AllowOrigin: "'*'"
 
   # Lambda Function for API Handler
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: cmd/api/
+      CodeUri: ./
       Handler: bootstrap
       Events:
-        GetRoot:
+        CatchAll:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApi
+            Path: /{proxy+}
+            Method: ANY
+        Root:
           Type: Api
           Properties:
             RestApiId: !Ref RestApi
             Path: /
-            Method: GET
-        GetHealth:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /health
-            Method: GET
-        PostData:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /data
-            Method: POST
-        GetData:
-          Type: Api
-          Properties:
-            RestApiId: !Ref RestApi
-            Path: /data
-            Method: GET
+            Method: ANY
 
 
 Outputs:
