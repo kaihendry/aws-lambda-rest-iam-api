@@ -1,4 +1,4 @@
-AWSTemplateFormatVersion: '2010-09-09'
+AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: AWS Lambda REST API with IAM Authentication
 
@@ -12,7 +12,6 @@ Globals:
   Function:
     Timeout: 5
     MemorySize: 128
-    Runtime: provided.al2023
     Architectures:
       - x86_64
 
@@ -31,8 +30,9 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: ./
-      Handler: bootstrap
+      CodeUri: .
+      Handler: main
+      Runtime: provided.al2
       Events:
         CatchAll:
           Type: Api
@@ -49,20 +49,18 @@ Resources:
     Metadata:
       BuildMethod: makefile
 
-
 Outputs:
   ApiUrl:
     Description: "API Gateway endpoint URL"
     Value: !Sub "https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
     Export:
       Name: !Sub "${AWS::StackName}-ApiUrl"
-  
+
   ApiId:
     Description: "API Gateway ID"
     Value: !Ref RestApi
     Export:
       Name: !Sub "${AWS::StackName}-ApiId"
-
 
   CurlCommand:
     Description: "Example curl command with AWS SigV4"

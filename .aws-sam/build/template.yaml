@@ -10,7 +10,6 @@ Globals:
   Function:
     Timeout: 5
     MemorySize: 128
-    Runtime: provided.al2023
     Architectures:
     - x86_64
 Resources:
@@ -28,7 +27,8 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: ApiFunction
-      Handler: bootstrap
+      Handler: main
+      Runtime: provided.al2
       Events:
         CatchAll:
           Type: Api
@@ -45,6 +45,7 @@ Resources:
             Path: /
             Method: ANY
     Metadata:
+      BuildMethod: makefile
       SamResourceId: ApiFunction
 Outputs:
   ApiUrl:
@@ -65,4 +66,4 @@ Outputs:
     Description: Example curl command with AWS SigV4
     Value:
       Fn::Sub: "curl --aws-sigv4 'aws:amz:${AWS::Region}:execute-api' \\\n     --user\
-        \ 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \\\n     'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'"
+        \ 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \\\n     'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'\n"

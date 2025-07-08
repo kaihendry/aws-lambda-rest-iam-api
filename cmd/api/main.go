@@ -8,7 +8,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/apex/gateway/v2"
+	"github.com/apex/gateway"
 )
 
 type HealthResponse struct {
@@ -26,7 +26,7 @@ type DataResponse struct {
 
 func main() {
 	mux := http.NewServeMux()
-	
+
 	// Define routes
 	mux.HandleFunc("/", handleRoot)
 	mux.HandleFunc("/health", handleHealth)
@@ -44,7 +44,7 @@ func main() {
 		slog.Info("Starting server", "port", port)
 		err = http.ListenAndServe(fmt.Sprintf(":%s", port), mux)
 	}
-	
+
 	if err != nil {
 		slog.Error("Server error", "error", err)
 		os.Exit(1)
@@ -53,31 +53,31 @@ func main() {
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
-	
+
 	response := DataResponse{
 		Message: "Welcome to AWS Lambda REST API with IAM Authentication",
 		Method:  r.Method,
 		Path:    r.URL.Path,
 	}
-	
+
 	writeJSONResponse(w, response, http.StatusOK)
 }
 
 func handleHealth(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
-	
+
 	response := HealthResponse{
 		Status:    "healthy",
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Message:   "API is running successfully",
 	}
-	
+
 	writeJSONResponse(w, response, http.StatusOK)
 }
 
 func handleData(w http.ResponseWriter, r *http.Request) {
 	slog.Info("Processing request", "method", r.Method, "path", r.URL.Path)
-	
+
 	switch r.Method {
 	case http.MethodGet:
 		response := DataResponse{
@@ -90,7 +90,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 			Path:   r.URL.Path,
 		}
 		writeJSONResponse(w, response, http.StatusOK)
-		
+
 	case http.MethodPost:
 		var requestData map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&requestData); err != nil {
@@ -102,7 +102,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 			writeJSONResponse(w, response, http.StatusBadRequest)
 			return
 		}
-		
+
 		response := DataResponse{
 			Message: "Data received successfully",
 			Data:    requestData,
@@ -110,7 +110,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 			Path:    r.URL.Path,
 		}
 		writeJSONResponse(w, response, http.StatusCreated)
-		
+
 	default:
 		response := DataResponse{
 			Message: fmt.Sprintf("Method %s not allowed", r.Method),
@@ -124,7 +124,7 @@ func handleData(w http.ResponseWriter, r *http.Request) {
 func writeJSONResponse(w http.ResponseWriter, data interface{}, statusCode int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(statusCode)
-	
+
 	if err := json.NewEncoder(w).Encode(data); err != nil {
 		slog.Error("Error encoding JSON response", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
