@@ -70,3 +70,41 @@ When implementing features, look for:
 - API Gateway integration handles REST endpoint routing
 - IAM policies should be defined in the SAM template for proper permissions
 - Environment-specific configurations managed through SAM parameters
+
+## IAM Authorization
+
+The API Gateway is configured with **AWS_IAM** authentication, requiring AWS Signature Version 4 for all requests.
+
+### Current Access Control
+- Any AWS principal with valid credentials and `execute-api:Invoke` permission can access the API
+- Authentication uses AWS SigV4, not API keys
+
+### Restricting Access to Specific Roles
+
+**Option 1: Resource-Based Policy**
+Add to API Gateway in template.yaml:
+```yaml
+RestApi:
+  Type: AWS::Serverless::Api
+  Properties:
+    Policy:
+      Statement:
+        - Effect: Allow
+          Principal:
+            AWS: 
+              - "arn:aws:iam::ACCOUNT:role/AllowedRole"
+          Action: execute-api:Invoke
+          Resource: "*"
+```
+
+**Option 2: IAM Policies**
+Grant `execute-api:Invoke` only to specific roles/users.
+
+### Why Not API Keys?
+
+AWS API Keys are designed for **usage tracking and throttling**, not authentication:
+- API keys identify calling applications for billing/monitoring
+- They don't verify the caller's identity or permissions
+- Anyone with the key can use it (no user context)
+- They're typically used alongside other auth methods (IAM, Cognito, etc.)
+- For security, use IAM authentication which provides proper identity verification and access control
