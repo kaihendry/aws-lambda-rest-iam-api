@@ -13,16 +13,64 @@ Globals:
     Architectures:
     - x86_64
 Resources:
+  ApiBRestrictedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName:
+        Fn::Sub: ${AWS::StackName}-api-b-restricted-role
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::Sub: arn:aws:iam::${AWS::AccountId}:root
+          Action: sts:AssumeRole
   RestApi:
     Type: AWS::Serverless::Api
     Properties:
       Name:
-        Fn::Sub: ${AWS::StackName}-api
+        Fn::Sub: ${AWS::StackName}-api-a
       StageName:
         Ref: Stage
       Auth:
         DefaultAuthorizer: AWS_IAM
         InvokeRole: NONE
+  RestApiB:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name:
+        Fn::Sub: ${AWS::StackName}-api-b
+      StageName:
+        Ref: Stage
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+        InvokeRole: NONE
+      Policy:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Principal:
+            AWS:
+              Fn::GetAtt:
+              - ApiBRestrictedRole
+              - Arn
+          Action: execute-api:Invoke
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*
+  ApiBRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: ApiBAccessPolicy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: Allow
+          Action: execute-api:Invoke
+          Resource:
+            Fn::Sub: arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${RestApiB}/*
+      Roles:
+      - Ref: ApiBRestrictedRole
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -44,26 +92,69 @@ Resources:
               Ref: RestApi
             Path: /
             Method: ANY
+        ApiBCatchAll:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: RestApiB
+            Path: /{proxy+}
+            Method: ANY
+        ApiBRoot:
+          Type: Api
+          Properties:
+            RestApiId:
+              Ref: RestApiB
+            Path: /
+            Method: ANY
     Metadata:
       BuildMethod: makefile
       SamResourceId: ApiFunction
 Outputs:
-  ApiUrl:
-    Description: API Gateway endpoint URL
+  ApiAUrl:
+    Description: API Gateway A endpoint URL (open access)
     Value:
       Fn::Sub: https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-ApiUrl
-  ApiId:
-    Description: API Gateway ID
+        Fn::Sub: ${AWS::StackName}-ApiAUrl
+  ApiBUrl:
+    Description: API Gateway B endpoint URL (restricted access)
+    Value:
+      Fn::Sub: https://${RestApiB}.execute-api.${AWS::Region}.amazonaws.com/${Stage}
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ApiBUrl
+  ApiAId:
+    Description: API Gateway A ID
     Value:
       Ref: RestApi
     Export:
       Name:
-        Fn::Sub: ${AWS::StackName}-ApiId
-  CurlCommand:
-    Description: Example curl command with AWS SigV4
+        Fn::Sub: ${AWS::StackName}-ApiAId
+  ApiBId:
+    Description: API Gateway B ID
+    Value:
+      Ref: RestApiB
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ApiBId
+  ApiBRestrictedRoleArn:
+    Description: ARN of the restricted role for API B
+    Value:
+      Fn::GetAtt:
+      - ApiBRestrictedRole
+      - Arn
+    Export:
+      Name:
+        Fn::Sub: ${AWS::StackName}-ApiBRestrictedRoleArn
+  CurlCommandApiA:
+    Description: Example curl command for API A with AWS SigV4
     Value:
       Fn::Sub: "curl --aws-sigv4 'aws:amz:${AWS::Region}:execute-api' \\\n     --user\
         \ 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \\\n     'https://${RestApi}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'\n"
+  CurlCommandApiB:
+    Description: Example curl command for API B with AWS SigV4 (requires restricted
+      role)
+    Value:
+      Fn::Sub: "curl --aws-sigv4 'aws:amz:${AWS::Region}:execute-api' \\\n     --user\
+        \ 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \\\n     'https://${RestApiB}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'\n"
