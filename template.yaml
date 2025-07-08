@@ -46,6 +46,8 @@ Resources:
             RestApiId: !Ref RestApi
             Path: /
             Method: ANY
+    Metadata:
+      BuildMethod: makefile
 
 
 Outputs:
