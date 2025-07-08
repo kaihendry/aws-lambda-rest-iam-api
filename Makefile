@@ -1,4 +1,4 @@
-.PHONY: build clean deploy destroy test test-api test-api-a test-api-b test-api-b-with-role test-api-with-temp-creds assume-role assume-role-export local-start local-invoke help api-url api-a-url api-b-url curl-examples
+.PHONY: build clean deploy destroy test test-api test-api-a test-api-b test-api-c test-api-b-with-role test-api-with-temp-creds assume-role assume-role-export local-start local-invoke help api-url api-a-url api-b-url api-c-url api-c-key curl-examples
 
 # Default target
 help:
@@ -8,9 +8,10 @@ help:
 	@echo "  deploy                   - Deploy the SAM application"
 	@echo "  destroy                  - Delete the SAM application"
 	@echo "  test                     - Run Go tests"
-	@echo "  test-api                 - Test both APIs (requires awscurl)"
+	@echo "  test-api                 - Test all APIs (requires awscurl)"
 	@echo "  test-api-a               - Test API A (open access)"
 	@echo "  test-api-b               - Test API B (restricted access)"
+	@echo "  test-api-c               - Test API C (IAM + API key)"
 	@echo "  test-api-b-with-role     - Test API B with automatic role assumption"
 	@echo "  assume-role              - Assume restricted role and export credentials"
 	@echo "  test-api-with-temp-creds - Test API with temporary credentials (for SSO)"
@@ -20,6 +21,8 @@ help:
 	@echo "  api-url                  - Show deployed API URLs"
 	@echo "  api-a-url                - Show API A URL"
 	@echo "  api-b-url                - Show API B URL"
+	@echo "  api-c-url                - Show API C URL"
+	@echo "  api-c-key                - Show API C key value"
 	@echo "  curl-examples            - Show example curl commands"
 
 # Build the Go Lambda function for SAM
@@ -99,21 +102,32 @@ outputs:
 api-url:
 	@echo "=== API URLs ==="
 	@echo "API A (open access):"
-	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --query 'Stacks[0].Outputs[?OutputKey==`ApiAUrl`].OutputValue' --output text
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiAUrl`].OutputValue' --output text
 	@echo "API B (restricted access):"
-	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --query 'Stacks[0].Outputs[?OutputKey==`ApiBUrl`].OutputValue' --output text
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiBUrl`].OutputValue' --output text
+	@echo "API C (IAM + API key):"
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiCUrl`].OutputValue' --output text
 
 # Show API A URL
 api-a-url:
-	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --query 'Stacks[0].Outputs[?OutputKey==`ApiAUrl`].OutputValue' --output text
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiAUrl`].OutputValue' --output text
 
 # Show API B URL
 api-b-url:
-	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --query 'Stacks[0].Outputs[?OutputKey==`ApiBUrl`].OutputValue' --output text
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiBUrl`].OutputValue' --output text
+
+# Show API C URL
+api-c-url:
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiCUrl`].OutputValue' --output text
+
+# Show API C key value
+api-c-key:
+	@API_KEY_ID=$$(aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiCKeyId`].OutputValue' --output text); \
+	aws apigateway get-api-key --api-key $$API_KEY_ID --include-value --region eu-west-2 --profile mine --query 'value' --output text
 
 # Show API B Restricted Role ARN
 role-arn:
-	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --query 'Stacks[0].Outputs[?OutputKey==`ApiBRestrictedRoleArn`].OutputValue' --output text
+	@aws cloudformation describe-stacks --stack-name aws-lambda-rest-iam-api --region eu-west-2 --profile mine --query 'Stacks[0].Outputs[?OutputKey==`ApiBRestrictedRoleArn`].OutputValue' --output text
 
 # Assume the restricted role and show export commands
 assume-role:
@@ -146,13 +160,15 @@ assume-role-export:
 	echo "export AWS_SECRET_ACCESS_KEY=$$SECRET_KEY"; \
 	echo "export AWS_SESSION_TOKEN=$$SESSION_TOKEN"
 
-# Test both APIs
+# Test all APIs
 test-api:
-	@echo "=== Testing Both APIs ==="
+	@echo "=== Testing All APIs ==="
 	@make test-api-a
 	@echo ""
 	@make test-api-b
-	@echo "=== Both API Tests Complete ==="
+	@echo ""
+	@make test-api-c
+	@echo "=== All API Tests Complete ==="
 
 # Test API A (open access)
 test-api-a:
@@ -203,6 +219,30 @@ test-api-b:
 	echo "awscurl --service execute-api --region $$AWS_REGION -X POST -H 'Content-Type: application/json' -d '{\"message\":\"Restricted test\"}' \"$$API_URL/data\""; \
 	echo ""; \
 	echo "=== API B Testing Info Complete ==="
+
+# Test API C (IAM + API key)
+test-api-c:
+	@echo "=== Testing API C (IAM + API Key) ==="
+	@API_URL=$$(make api-c-url); \
+	AWS_REGION="eu-west-2"; \
+	API_KEY=$$(make api-c-key); \
+	echo "API C URL: $$API_URL"; \
+	echo "Region: $$AWS_REGION"; \
+	echo "API Key: $$API_KEY"; \
+	echo ""; \
+	echo "1. Testing Health Check (GET /health)"; \
+	export AWS_PROFILE=mine && awscurl --service execute-api --region $$AWS_REGION -H "X-API-Key: $$API_KEY" "$$API_URL/health" | jq .; \
+	echo ""; \
+	echo "2. Testing Root Endpoint (GET /)"; \
+	export AWS_PROFILE=mine && awscurl --service execute-api --region $$AWS_REGION -H "X-API-Key: $$API_KEY" "$$API_URL/" | jq .; \
+	echo ""; \
+	echo "3. Testing Get Data (GET /data)"; \
+	export AWS_PROFILE=mine && awscurl --service execute-api --region $$AWS_REGION -H "X-API-Key: $$API_KEY" "$$API_URL/data" | jq .; \
+	echo ""; \
+	echo "4. Testing Post Data (POST /data)"; \
+	export AWS_PROFILE=mine && awscurl --service execute-api --region $$AWS_REGION -H "X-API-Key: $$API_KEY" -X POST -H 'Content-Type: application/json' -d '{"message":"Test from API C","timestamp":"'$$(date -u +%Y-%m-%dT%H:%M:%SZ)'"}' "$$API_URL/data" | jq .; \
+	echo ""; \
+	echo "=== API C Testing Complete ==="
 
 # Test API B with automatic role assumption
 test-api-b-with-role:
@@ -258,9 +298,13 @@ curl-examples:
 	@echo "=== Example awscurl Commands ==="
 	@API_A_URL=$$(make api-a-url); \
 	API_B_URL=$$(make api-b-url); \
+	API_C_URL=$$(make api-c-url); \
+	API_C_KEY=$$(make api-c-key); \
 	AWS_REGION=$$(aws configure get region 2>/dev/null || echo "eu-west-2"); \
 	echo "API A URL: $$API_A_URL"; \
 	echo "API B URL: $$API_B_URL"; \
+	echo "API C URL: $$API_C_URL"; \
+	echo "API C Key: $$API_C_KEY"; \
 	echo "Region: $$AWS_REGION"; \
 	echo ""; \
 	echo "=== API A Commands (Open Access) ==="; \
@@ -291,6 +335,16 @@ curl-examples:
 	echo ""; \
 	echo "Data endpoint:"; \
 	echo "awscurl --service execute-api --region $$AWS_REGION '$$API_B_URL/data'"; \
+	echo ""; \
+	echo "=== API C Commands (IAM + API Key) ==="; \
+	echo "Health check:"; \
+	echo "awscurl --service execute-api --region $$AWS_REGION -H 'X-API-Key: $$API_C_KEY' '$$API_C_URL/health'"; \
+	echo ""; \
+	echo "Root endpoint:"; \
+	echo "awscurl --service execute-api --region $$AWS_REGION -H 'X-API-Key: $$API_C_KEY' '$$API_C_URL/'"; \
+	echo ""; \
+	echo "Data endpoint:"; \
+	echo "awscurl --service execute-api --region $$AWS_REGION -H 'X-API-Key: $$API_C_KEY' '$$API_C_URL/data'"; \
 	echo ""; \
 	echo "=== Test without authentication (should fail) ==="; \
 	echo "curl '$$API_A_URL/health'"

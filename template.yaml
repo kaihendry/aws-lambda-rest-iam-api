@@ -57,6 +57,51 @@ Resources:
             Action: execute-api:Invoke
             Resource: !Sub "arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:*/*"
 
+  # API Gateway C - IAM auth with API keys
+  RestApiC:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub "${AWS::StackName}-api-c"
+      StageName: !Ref Stage
+      Auth:
+        DefaultAuthorizer: AWS_IAM
+        InvokeRole: NONE
+        ApiKeyRequired: true
+
+  # API Key for API C
+  ApiCKey:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub "${AWS::StackName}-api-c-key"
+      Description: "API Key for API C with IAM authentication"
+      Enabled: true
+
+  # Usage Plan for API C (with stage association)
+  ApiCUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    DependsOn: RestApiC
+    Properties:
+      UsagePlanName: !Sub "${AWS::StackName}-api-c-usage-plan"
+      Description: "Usage plan for API C"
+      ApiStages:
+        - ApiId: !Ref RestApiC
+          Stage: !Ref Stage
+      Throttle:
+        RateLimit: 1000
+        BurstLimit: 2000
+      Quota:
+        Limit: 10000
+        Period: DAY
+
+  # Associate API key with usage plan
+  ApiCUsagePlanKey:
+    Type: AWS::ApiGateway::UsagePlanKey
+    DependsOn: ApiCUsagePlan
+    Properties:
+      KeyId: !Ref ApiCKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref ApiCUsagePlan
+
   # Policy attachment to give the role access to API B
   ApiBRolePolicy:
     Type: AWS::IAM::Policy
@@ -105,6 +150,19 @@ Resources:
             RestApiId: !Ref RestApiB
             Path: /
             Method: ANY
+        # API C Events (same endpoints as API A and B)
+        ApiCCatchAll:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApiC
+            Path: /{proxy+}
+            Method: ANY
+        ApiCRoot:
+          Type: Api
+          Properties:
+            RestApiId: !Ref RestApiC
+            Path: /
+            Method: ANY
     Metadata:
       BuildMethod: makefile
 
@@ -121,6 +179,12 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-ApiBUrl"
 
+  ApiCUrl:
+    Description: "API Gateway C endpoint URL (IAM + API key)"
+    Value: !Sub "https://${RestApiC}.execute-api.${AWS::Region}.amazonaws.com/${Stage}"
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiCUrl"
+
   ApiAId:
     Description: "API Gateway A ID"
     Value: !Ref RestApi
@@ -133,11 +197,27 @@ Outputs:
     Export:
       Name: !Sub "${AWS::StackName}-ApiBId"
 
+  ApiCId:
+    Description: "API Gateway C ID"
+    Value: !Ref RestApiC
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiCId"
+
   ApiBRestrictedRoleArn:
     Description: "ARN of the restricted role for API B"
     Value: !GetAtt ApiBRestrictedRole.Arn
     Export:
       Name: !Sub "${AWS::StackName}-ApiBRestrictedRoleArn"
+
+  ApiCKeyId:
+    Description: "API Key ID for API C"
+    Value: !Ref ApiCKey
+    Export:
+      Name: !Sub "${AWS::StackName}-ApiCKeyId"
+
+  ApiCKeyValue:
+    Description: "API Key value for API C (retrieve with: aws apigateway get-api-key --api-key [KeyId] --include-value)"
+    Value: !Ref ApiCKey
 
   CurlCommandApiA:
     Description: "Example curl command for API A with AWS SigV4"
@@ -152,3 +232,11 @@ Outputs:
       curl --aws-sigv4 'aws:amz:${AWS::Region}:execute-api' \
            --user 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \
            'https://${RestApiB}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'
+
+  CurlCommandApiC:
+    Description: "Example curl command for API C with AWS SigV4 and API key"
+    Value: !Sub |
+      curl --aws-sigv4 'aws:amz:${AWS::Region}:execute-api' \
+           --user 'AWS_ACCESS_KEY_ID:AWS_SECRET_ACCESS_KEY' \
+           -H 'X-API-Key: YOUR_API_KEY' \
+           'https://${RestApiC}.execute-api.${AWS::Region}.amazonaws.com/${Stage}/health'

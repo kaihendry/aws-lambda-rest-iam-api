@@ -141,12 +141,20 @@ func extractCallerInfo(r *http.Request) *CallerInfo {
 	// Determine which API Gateway this request came from by looking at the Host header
 	if host := r.Header.Get("Host"); host != "" {
 		// Parse out which API Gateway this request came from
+		// Note: These IDs will be different after deployment, but logic remains the same
 		if strings.Contains(host, "7pxbysogui") {
 			caller.UserARN = "API A (Open Access)"
 		} else if strings.Contains(host, "cqst45pam7") {
 			caller.UserARN = "API B (Restricted Access)"
+		} else if strings.Contains(host, "vo9f4c6gj4") {
+			caller.UserARN = "API C (IAM + API Key)"
 		} else {
-			caller.UserARN = "API Gateway: " + host
+			// Check if this request has an API key header (indicates API C)
+			if apiKey := r.Header.Get("X-API-Key"); apiKey != "" {
+				caller.UserARN = "API C (IAM + API Key)"
+			} else {
+				caller.UserARN = "API Gateway: " + host
+			}
 		}
 	}
 	
